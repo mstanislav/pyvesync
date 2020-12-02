@@ -12,7 +12,8 @@ class VeSyncBaseDevice(object):
     def __init__(self, details, manager):
         """Initilize VeSync device base class."""
         self.manager = manager
-        if 'cid' in details and details['cid'] is not None:
+
+        if 'cid' in details:
             self.device_name = details.get('deviceName', None)
             self.device_image = details.get('deviceImg', None)
             self.cid = details.get('cid', None)
@@ -99,7 +100,8 @@ class VeSyncBaseDevice(object):
             disp.append(('UUID: ', self.uuid))
         disp1 = collections.OrderedDict(disp)
         for k, v in disp1.items():
-            print("{:.<15} {:<15}".format(k, v))
+            if v is not None:
+                print("{:.<15} {:<15}".format(k, v))
 
     def displayJSON(self):
         """JSON API for device details."""

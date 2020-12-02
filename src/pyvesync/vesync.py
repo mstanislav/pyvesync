@@ -10,6 +10,7 @@ from pyvesync.vesyncoutlet import (VeSyncOutlet7A, VeSyncOutlet10A,
 from pyvesync.vesyncswitch import VeSyncWallSwitch, VeSyncDimmerSwitch
 from pyvesync.vesyncfan import VeSyncAir131
 from pyvesync.vesyncbulb import VeSyncBulbESL100, VeSyncBulbESL100CW
+from pyvesync.vesyncscale import VeSyncScaleESF14
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +40,8 @@ def get_device(device_type, config, manager):
         return VeSyncBulbESL100CW(config, manager)
     if device_type == 'ESWD16':
         return VeSyncDimmerSwitch(config, manager)
+    if device_type == 'ESF14':
+        return VeSyncScaleESF14(config, manager)
     logger.debug('Unknown device found - %s', device_type)
     return None
 
@@ -57,6 +60,7 @@ class VeSync:
         self.switches = []
         self.fans = []
         self.bulbs = []
+        self.scales = []
         self.enabled = False
         self.update_interval = API_RATE_LIMIT
         self.last_update_ts = None
@@ -107,7 +111,7 @@ class VeSync:
     def add_dev_test(self, new_dev):
         """Test if new device should be added - True = Add."""
         if 'cid' in new_dev:
-            devices = [self.outlets, self.bulbs, self.switches, self.fans]
+            devices = [self.outlets, self.bulbs, self.switches, self.fans, self.scales]
             was_found = False
             for dev in chain(*devices):
                 if dev.cid == new_dev.get('cid') and\
@@ -125,6 +129,7 @@ class VeSync:
         switches = []
         fans = []
         bulbs = []
+        scales = []
 
         outlet_types = [
             'wifi-switch-1.3', 'ESW03-USA', 'ESW01-EU', 'ESW15-USA', 'ESO15-TB'
@@ -132,9 +137,10 @@ class VeSync:
         switch_types = ['ESWL01', 'ESWL03', 'ESWD16']
         fan_types = ['LV-PUR131S']
         bulb_types = ['ESL100', 'ESL100CW']
+        scale_types = ['ESF14']
 
         num_devices = len(self.outlets) + len(self.switches) + len(self.fans) \
-            + len(self.bulbs)
+            + len(self.bulbs) + len(self.scales)
 
         if not num_devices and devices:
             logger.debug('New device list initialized')
@@ -161,6 +167,11 @@ class VeSync:
             for dev in self.bulbs:
                 logger.debug('Bulbs - %s', str(dev))
 
+            self.scales[:] = [x for x in self.scales if self.remove_dev_test(
+                x, devices)]
+            for dev in self.scales:
+                logger.debug('Scales - %s', str(dev))
+
             devices[:] = [x for x in devices if self.add_dev_test(x)]
 
         for dev in devices:
@@ -175,19 +186,22 @@ class VeSync:
                     switches.append(get_device(dev_type, dev, self))
                 elif dev_type in bulb_types:
                     bulbs.append(get_device(dev_type, dev, self))
+                elif dev_type in scale_types:
+                    scales.append(get_device(dev_type, dev, self))
                 else:
                     logger.warning('Unknown device %s', dev_type)
             else:
                 logger.error('Details keys not found %s', str(dev))
 
-        return outlets, switches, fans, bulbs
+        return outlets, switches, fans, bulbs, scales
 
     def get_devices(self) -> tuple:
-        """Return tuple listing outlets, switches, and fans of devices."""
+        """Return tuple listing outlets, switches, fans, bulbs, and scales of devices."""
         outlets = []
         switches = []
         fans = []
         bulbs = []
+        scales = []
         if not self.enabled:
             return None
 
@@ -203,7 +217,7 @@ class VeSync:
         if response and helpers.code_check(response):
             if 'result' in response and 'list' in response['result']:
                 device_list = response['result']['list']
-                outlets, switches, fans, bulbs = self.process_devices(
+                outlets, switches, fans, bulbs, scales = self.process_devices(
                     device_list)
             else:
                 logger.error('Device list in response not found')
@@ -212,7 +226,7 @@ class VeSync:
 
         self.in_process = False
 
-        return (outlets, switches, fans, bulbs)
+        return (outlets, switches, fans, bulbs, scales)
 
     def login(self) -> bool:
         """Return True if log in request succeeds."""
@@ -253,14 +267,15 @@ class VeSync:
         if self.device_time_check():
 
             if not self.in_process and self.enabled:
-                outlets, switches, fans, bulbs = self.get_devices()
+                outlets, switches, fans, bulbs, scales = self.get_devices()
 
                 self.outlets.extend(outlets)
                 self.switches.extend(switches)
                 self.fans.extend(fans)
                 self.bulbs.extend(bulbs)
+                self.scales.extend(scales)
 
-                devices = [self.outlets, self.bulbs, self.switches, self.fans]
+                devices = [self.outlets, self.bulbs, self.switches, self.fans, self.scales]
 
                 [device.update() for device in chain(*devices)]
 
@@ -275,6 +290,6 @@ class VeSync:
 
     def update_all_devices(self):
         """Run get_details() for each device."""
-        dev_list = [self.outlets, self.fans, self.bulbs, self.switches]
+        dev_list = [self.outlets, self.fans, self.bulbs, self.switches, self.scales]
         for dev in chain(*dev_list):
             dev.get_details()
